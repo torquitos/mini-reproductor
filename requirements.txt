@@ -1,0 +1,3 @@
+Pillow>=9.0.0
+winsdk>=22.11.0
+pynput>=1.7.6
