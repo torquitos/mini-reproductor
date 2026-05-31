@@ -117,7 +117,7 @@ class MiniSpotifyWidgetApp:
 
         self.menu = tk.Menu(
             self.window, tearoff=0, bg="#0B0813", fg="white",
-            activebackground="#FF3366", bd=0
+            activebackground="#E010AC", bd=0
         )
         self.menu.add_command(label="❌ Cerrar Mini Widget", command=self.cerrar_todo)
         self.menu.add_command(label="👁️ Mostrar/Ocultar", command=self.toggle_ventana)
