@@ -1,23 +1,9 @@
-# Python
 __pycache__/
 *.pyc
 *.pyo
-
-# Iconos temporales generados en runtime
-temp_mini.ico
-temp_silk.ico
-temp_radar.ico
+*.log
 *.ico
-
-# Entornos virtuales
+*.exe
 venv/
-.venv/
-env/
-
-# IDEs
-.vscode/
-.idea/
-
-# OS
+.env
 .DS_Store
-Thumbs.db

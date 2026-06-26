@@ -1,146 +1,88 @@
-# 🎵 Mini Reproductor Spotify Widget
+# Nexus Mini Player
 
-Un elegante widget flotante para Windows que muestra la canción actual de Spotify con controles y visualización en tiempo real.
+Widget flotante para Windows que muestra lo que está sonando en Spotify: carátula, título, artista, barra de progreso animada y controles básicos.
 
-## ✨ Características
+## Captura
 
-### Visualización
-- 🎬 **GIF animado** como avatar personalizable
-- 🎨 **Efecto glow** dinámico en el borde
-- 📊 **Ecualizador en tiempo real** con 8 barras
-- 📈 **Barra de progreso** de la canción
-- 🖼️ **Carátula del álbum** descargada automáticamente
-- 📜 **Scroll animado** para títulos largos
-- ✨ **Animaciones suaves** al cambiar de canción
-
-### Funcionalidad
-- ▶️ **Botones de control**: Play/Pause y Siguiente
-- ⌨️ **Atajo global**: `Ctrl+Shift+M` para mostrar/ocultar
-- 🎯 **Sincronización en tiempo real** con Spotify
-- 🖱️ **Arrastrable** por cualquier parte
-- 📌 **Siempre visible** encima de otras ventanas
-
-### Estado
-- 🟢 LED verde cuando está reproduciendo
-- 🔴 LED rojo cuando está pausado
-
-## 📋 Requisitos
-
-- Windows 10/11
-- Python 3.8+
-- Spotify instalado y ejecutándose
-- lofi.gif en la misma carpeta que app.pyw
-
-## 🚀 Instalación
-
-```bash
-# Clonar el repositorio
-git clone https://github.com/torquitos/mini-reproductor.git
-cd mini-reproductor
-
-# Crear entorno virtual (opcional pero recomendado)
-python -m venv venv
-venv\Scripts\activate
-
-# Instalar dependencias
-pip install -r requirements.txt
+```
+  ┌─────────────────────────────┐
+  │  ●  ┌──────────────────┐    │
+  │     │  ♪  (carátula)   │    │
+  │     └──────────────────┘    │
+  │  Canción Actual             │
+  │  Artista                    │
+  │  0:00 ───●───────── 3:30   │
+  │    ◂    ▶    ▸              │
+  │   ▄▄▆▇█▇▆▄▄▆▇████▇▆▄▄▆▇   │
+  └─────────────────────────────┘
 ```
 
-## 🎮 Uso
+## Características
+
+| Visual | Funcionalidad |
+|--------|---------------|
+| Carátula del álbum en tiempo real | Doble clic en carátula → play/pause |
+| Anillo ecualizador animado alrededor de la carátula | Play / pause / anterior / siguiente |
+| Barra de progreso con animación suave | Seek clickeable en la barra |
+| Ecualizador decorativo en la parte inferior | Atajo `Ctrl + Shift + M` para mostrar/ocultar (global) |
+| Tooltip con título y artista completo | Menú contextual con clic derecho |
+| Punto de estado (verde/gris/rojo) | Modo siempre encima configurable |
+| Widget compacto, arrastrable | Recuerda la última posición |
+
+## Instalación
 
 ```bash
-# Ejecutar la aplicación
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 python app.pyw
 ```
 
-O ejecutar directamente desde el Explorador:
-- Doble clic en `app.pyw`
-- El widget aparecerá en la esquina inferior derecha
+También puedes abrir `app.pyw` con doble clic después de instalar las dependencias.
 
-### Controles
+## Controles
 
 | Acción | Resultado |
 |--------|-----------|
-| **Clic izquierdo + arrastrar** | Mover widget |
-| **Botón ▶/⏸** | Play/Pause |
-| **Botón ⏭** | Siguiente canción |
-| **Ctrl+Shift+M** | Mostrar/Ocultar |
-| **Clic derecho** | Menú contextual |
+| Clic izquierdo + arrastrar | Mover el widget |
+| Doble clic en carátula | Reproducir o pausar |
+| `Play` / `Pause` | Reproducir o pausar |
+| `<<` / `>>` | Canción anterior o siguiente |
+| Clic en barra de progreso | Adelantar o retroceder |
+| `Ctrl + Shift + M` | Mostrar u ocultar (funciona aunque el widget no tenga foco) |
+| Clic derecho | Abrir menú contextual |
 
-## 📁 Estructura
+## Estructura del proyecto
 
 ```
-mini-reproductor/
-├── app.pyw              # Aplicación principal (UI)
-├── radar_core.py        # Núcleo de Spotify (backend)
-├── lofi.gif             # Avatar animado
-├── requirements.txt     # Dependencias
-├── .gitignore           # Configuración de git
-└── README.md            # Este archivo
+nexus-mini-player/
+├── src/
+│   ├── main.py       Punto de entrada + hotkey global
+│   ├── window.py     Ventana flotante principal
+│   ├── widgets.py    Carátula, ring, barra de progreso, ecualizador, botones
+│   ├── spotify.py    Lectura y control de Spotify vía winsdk
+│   ├── theme.py      Colores, dimensiones, constantes visuales
+│   └── config.py     Carga/guarda posición y configuración
+├── app.pyw           Acceso directo (doble clic)
+├── requirements.txt  Dependencias
+└── config.json       Se crea automáticamente
 ```
 
-## ⚙️ Configuración
+## Troubleshooting
 
-### Avatar personalizado
+**Spotify no aparece**
 
-Reemplaza `lofi.gif` con tu propio GIF animado:
+- Abre Spotify y reproduce una canción.
+- Si sigue igual, reinicia Spotify y vuelve a abrir el widget.
+- Revisa `nexus.log` para ver el último error.
 
-1. Crea un GIF de ~44x44 píxeles (cualquier tamaño funciona)
-2. Guárdalo como `lofi.gif` en la carpeta del proyecto
-3. Reinicia la aplicación
+**Error con dependencias**
 
-### Tamaño y posición
-
-Edita en `app.pyw`:
-
-```python
-self.ancho = 380    # Ancho del widget
-self.alto = 110     # Alto del widget
-```
-
-## 🛠️ Troubleshooting
-
-### "No encuentra Spotify"
-- Asegúrate de que Spotify esté abierto
-- Verifica que tengas una canción reproduciendo
-- Reinicia Spotify
-
-### El widget no se mueve/controla
-- Puede que `pynput` tenga permisos limitados
-- Ejecuta Python como administrador
-
-### La carátula no aparece
-- Verifica tu conexión de internet
-- La carátula requiere conexión para descargar
-
-### Error con `winsdk`
 ```bash
-# Instala explícitamente:
-pip install winsdk
+pip install -r requirements.txt
 ```
 
-## 📦 Dependencias
+**La carátula no aparece**
 
-- **Pillow**: Manejo de imágenes y GIFs
-- **winsdk**: Acceso a controles multimedia de Windows
-- **pynput**: Atajos de teclado globales
-
-## 🎯 Futuros mejoras
-
-- [ ] Seleccionar tema de colores
-- [ ] Reproducción local (MP3, FLAC, etc.)
-- [ ] Estadísticas de escucha
-- [ ] Integración con Last.fm
-- [ ] Soporte para otros reproductores (YouTube Music, etc.)
-
-## 📝 Licencia
-
-MIT - Siéntete libre de usar, modificar y distribuir.
-
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas! Abre un issue o pull request.
-
----
-
-**Hecho con ❤️ por [torquitos](https://github.com/torquitos)**
+- Algunas sesiones multimedia de Windows tardan en entregar la carátula.
+- Cambia de canción o reinicia Spotify.
