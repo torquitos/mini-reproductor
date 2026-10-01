@@ -1,6 +1,6 @@
 # Nexus Mini Player
 
-[![Descargar última versión](https://img.shields.io/github/v/release/torquitos/mini-reproductor?label=Descargar&style=for-the-badge&color=C95B45)](https://github.com/torquitos/mini-reproductor/releases/latest)
+[![Descargar última versión](https://img.shields.io/github/v/release/torquitos/nexus-mini-player?label=Descargar&style=for-the-badge&color=C95B45)](https://github.com/torquitos/nexus-mini-player/releases/latest)
 
 Widget flotante para Windows que muestra lo que está sonando ahora mismo: carátula, título, artista, barra de progreso y controles básicos. No está atado a una sola app — lee cualquier reproductor que registre su sesión con Windows: **Spotify**, **YouTube Music**, **Apple Music**, el navegador, VLC, etc.
 
@@ -30,7 +30,7 @@ El color de acento (barra de progreso, botón de play, ecualizador) se calcula a
 
 ### Opción rápida: descargar el .exe
 
-Andá a [Releases](https://github.com/torquitos/mini-reproductor/releases/latest), descargá el `.zip`, extraelo y ejecutá `NexusMiniPlayer.exe`. No requiere instalar Python ni nada más.
+Andá a [Releases](https://github.com/torquitos/nexus-mini-player/releases/latest), descargá el `.zip`, extraelo y ejecutá `NexusMiniPlayer.exe`. No requiere instalar Python ni nada más.
 
 > Windows puede mostrar una advertencia de SmartScreen la primera vez (normal en apps nuevas sin firma digital) — hacé clic en "Más información" → "Ejecutar de todas formas".
 
