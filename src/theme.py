@@ -1,32 +1,27 @@
 from PySide6.QtGui import QColor
 
-W = 300
-H = 420
-M = 20
+# Layout horizontal compacto: carátula a la izquierda, info + controles a la derecha.
+W = 420
+H = 166
+M = 18
 
 WIN_W = W + M * 2
 WIN_H = H + M * 2
 
-COVER = 200
-RING = 240
+COVER = H  # la carátula es cuadrada y ocupa todo el alto disponible
+RADIUS = 20
+COVER_RADIUS = 16
 
-BG_GRADIENT_TOP = QColor("#0A0B0E")
-BG_GRADIENT_BOTTOM = QColor("#161A24")
+# Base neutra; el acento real se calcula por canción a partir de la carátula (ver spotify.extract_accent_color).
+BG_BASE = QColor("#131419")
+BG_BASE_DARK = QColor("#0E0F13")
+DEFAULT_ACCENT = (201, 91, 69)
 TEXT = "#FFFFFF"
-TEXT_DIM = "rgba(255,255,255,0.5)"
-TEXT_MUTED = "rgba(255,255,255,0.25)"
-ACCENT = "#00CECE"
-ACCENT_HOVER = "#00FFFF"
-VIZ_CYAN = QColor("#00CECE")
-VIZ_PURPLE = QColor(170, 80, 247)
-VIZ_PINK = QColor("#CC44CC")
-PROGRESS_BG = "rgba(255,255,255,0.08)"
-PROGRESS_ACCENT = "#00CECE"
-BTN_SECONDARY = "rgba(255,255,255,0.6)"
-BTN_HOVER_BG = "rgba(255,255,255,0.08)"
-BTN_PLAY_BG = "#00CECE"
-BTN_PLAY_HOVER = "#00FFFF"
-BTN_PLAY_TEXT = "#000000"
-MENU_BG = "#121418"
-MENU_BORDER = "#1C1F26"
-MENU_HOVER = "#1C1F26"
+TEXT_DIM = "rgba(255,255,255,0.55)"
+TEXT_MUTED = "rgba(255,255,255,0.32)"
+PROGRESS_BG = "rgba(255,255,255,0.12)"
+BTN_SECONDARY = "rgba(255,255,255,0.75)"
+BTN_HOVER_BG = "rgba(255,255,255,0.10)"
+MENU_BG = "#17181D"
+MENU_BORDER = "#262830"
+MENU_HOVER = "#262830"

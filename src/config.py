@@ -1,7 +1,13 @@
 import json
+import logging
+import os
 from pathlib import Path
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+LOGGER = logging.getLogger("nexus")
+
+APP_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "NexusMiniPlayer"
+APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_PATH = APP_DATA_DIR / "config.json"
 
 
 class Config:
@@ -19,8 +25,8 @@ class Config:
                 self.x = data.get("x")
                 self.y = data.get("y")
                 self.topmost = data.get("topmost", False)
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.warning("No se pudo cargar config.json: %s", exc)
 
     def save(self, x: int, y: int, topmost: bool):
         self.x = x
@@ -29,5 +35,5 @@ class Config:
         try:
             with CONFIG_PATH.open("w") as f:
                 json.dump({"x": x, "y": y, "topmost": topmost}, f, indent=2)
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.warning("No se pudo guardar config.json: %s", exc)

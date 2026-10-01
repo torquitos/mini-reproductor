@@ -9,6 +9,8 @@ from io import BytesIO
 
 from PIL import Image
 
+from . import volume as volume_ctl
+
 try:
     from winsdk.windows.media.control import (
         GlobalSystemMediaTransportControlsSessionManager as SessionManager,
@@ -26,13 +28,42 @@ LOGGER = logging.getLogger("nexus")
 
 @dataclass
 class TrackInfo:
-    title: str = "Abriendo Spotify..."
-    artist: str = "Nexus Mini Player"
+    title: str = "Nexus Mini Player"
+    artist: str = "Abre Spotify, YouTube Music o Apple Music"
     playing: bool = False
     duration_ms: int = 0
     position_ms: int = 0
     cover: Image.Image | None = None
+    accent_color: tuple[int, int, int] = (201, 91, 69)
+    app_id: str = ""
     error: str = ""
+
+
+def extract_accent_color(img: Image.Image) -> tuple[int, int, int]:
+    """Elige un color vivo y representativo de la carátula (no el promedio, que da grises apagados)."""
+    small = img.convert("RGB").resize((48, 48), Image.Resampling.BILINEAR)
+    palette_img = small.quantize(colors=6, method=Image.Quantize.MEDIANCUT)
+    palette = palette_img.getpalette()
+    counts = sorted(palette_img.getcolors(), reverse=True)
+
+    best = None
+    best_score = -1.0
+    for count, idx in counts:
+        r, g, b = palette[idx * 3: idx * 3 + 3]
+        mx, mn = max(r, g, b), min(r, g, b)
+        lightness = (mx + mn) / 2 / 255
+        saturation = 0 if mx == mn else (mx - mn) / (255 - abs(mx + mn - 255))
+        if lightness < 0.12 or lightness > 0.92:
+            continue
+        score = saturation * 0.8 + (count / len(small.getdata())) * 0.2
+        if score > best_score:
+            best_score = score
+            best = (r, g, b)
+
+    if best is None and counts:
+        _, idx = counts[0]
+        best = tuple(palette[idx * 3: idx * 3 + 3])
+    return best or (201, 91, 69)
 
 
 class SpotifySession:
@@ -46,6 +77,7 @@ class SpotifySession:
         self._last_title = None
         self._cover_updated = False
         self._last_refresh = time.time()
+        self._refreshing = False
 
     def _run_loop(self):
         asyncio.set_event_loop(self._loop)
@@ -55,16 +87,29 @@ class SpotifySession:
         if self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
 
+    def run_coroutine(self, coro):
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+
     async def _get_session(self):
+        """Devuelve la sesión multimedia a mostrar: Nexus no está atado a Spotify,
+        lee cualquier app que registre su sesión con Windows (Spotify, YouTube Music,
+        Apple Music, el navegador, etc.) y prioriza la que esté sonando en este momento."""
         if SessionManager is None:
             return None
         try:
             manager = await SessionManager.request_async()
-            for session in manager.get_sessions():
-                app_id = (session.source_app_user_model_id or "").lower()
-                if "spotify" in app_id:
+            sessions = list(manager.get_sessions())
+            if not sessions:
+                return None
+
+            for session in sessions:
+                if self._is_playing(session.get_playback_info().playback_status):
                     return session
-            return manager.get_current_session()
+
+            current = manager.get_current_session()
+            if current:
+                return current
+            return sessions[0]
         except Exception:
             return None
 
@@ -96,47 +141,104 @@ class SpotifySession:
             LOGGER.warning("Seek failed: %s", exc)
             return False
 
+    def get_volume(self) -> float | None:
+        """Volumen (0.0-1.0) del proceso que alimenta la sesión activa. Esto no viene
+        de GSMTC (la API de 'now playing' no expone volumen): se lee del mezclador de
+        audio de Windows (pycaw), buscando el proceso por su nombre de app."""
+        app_id = self.snapshot().app_id
+        if not app_id:
+            return None
+        return volume_ctl.get_volume(app_id)
+
+    def set_volume(self, value: float) -> bool:
+        app_id = self.snapshot().app_id
+        if not app_id:
+            return False
+        return volume_ctl.set_volume(app_id, value)
+
     async def refresh(self):
         if SessionManager is None:
-            return
-        session = await self._get_session()
-        if not session:
             with self._lock:
                 self._info = TrackInfo(
-                    title="Esperando Spotify...",
-                    artist="Dale play en Spotify",
-                    error="No hay sesión activa",
+                    title="Windows Media no disponible",
+                    artist="Esta versión de Windows no soporta esta función",
+                    error="sin_soporte",
                 )
             return
+        if self._refreshing:
+            return
+        self._refreshing = True
         try:
-            props = await session.try_get_media_properties_async()
-            playback = session.get_playback_info()
-            timeline = session.get_timeline_properties()
+            session = await self._get_session()
+            if not session:
+                with self._lock:
+                    self._info = TrackInfo(
+                        title="Nada reproduciéndose",
+                        artist="Abre Spotify, YouTube Music o Apple Music",
+                        error="sin_sesion",
+                    )
+                    self._last_refresh = time.time()
+                return
+            try:
+                props = await session.try_get_media_properties_async()
+                playback = session.get_playback_info()
+                timeline = session.get_timeline_properties()
 
-            title = props.title or "Sin título"
-            artist = props.artist or "Artista desconocido"
-            playing = self._is_playing(playback.playback_status)
-            duration = self._ms(timeline.end_time)
-            position = self._ms(timeline.position)
+                title = props.title or "Sin título"
+                artist = props.artist or "Artista desconocido"
+                playing = self._is_playing(playback.playback_status)
+                duration = self._ms(timeline.end_time)
+                reported_position = self._ms(timeline.position)
+                position = self._reconcile_position(title, playing, reported_position)
 
-            new_cover = None
-            if title != self._last_title:
-                new_cover = await self._read_cover(props.thumbnail)
+                app_id = session.source_app_user_model_id or ""
 
-            with self._lock:
-                self._info = TrackInfo(
-                    title=title,
-                    artist=artist,
-                    playing=playing,
-                    duration_ms=duration,
-                    position_ms=position,
-                    cover=new_cover if new_cover is not None else self._info.cover,
-                )
-                self._cover_updated = new_cover is not None
-                self._last_title = title
-                self._last_refresh = time.time()
-        except Exception as exc:
-            LOGGER.debug("Refresh failed: %s", exc)
+                new_cover = None
+                new_accent = None
+                if title != self._last_title:
+                    new_cover = await self._read_cover(props.thumbnail)
+                    if new_cover is not None:
+                        new_accent = extract_accent_color(new_cover)
+
+                with self._lock:
+                    self._info = TrackInfo(
+                        title=title,
+                        artist=artist,
+                        playing=playing,
+                        duration_ms=duration,
+                        position_ms=position,
+                        cover=new_cover if new_cover is not None else self._info.cover,
+                        accent_color=new_accent if new_accent is not None else self._info.accent_color,
+                        app_id=app_id,
+                    )
+                    self._cover_updated = new_cover is not None
+                    self._last_title = title
+                    self._last_refresh = time.time()
+            except Exception as exc:
+                LOGGER.debug("Refresh failed: %s", exc)
+        finally:
+            self._refreshing = False
+
+    def _reconcile_position(self, title: str, playing: bool, reported_ms: int) -> int:
+        """GSMTC/Spotify no siempre reporta la posición en tiempo real: a veces manda
+        un valor desactualizado unos segundos, que luego "corrige" de golpe. Eso se ve
+        como la barra retrocediendo y saltando. Para evitarlo, solo confiamos en el
+        valor nuevo si es coherente con lo que ya veníamos extrapolando nosotros."""
+        if title != self._last_title:
+            return reported_ms
+
+        with self._lock:
+            prev = self._info
+            elapsed = time.time() - self._last_refresh
+            predicted = prev.position_ms + (elapsed * 1000 if prev.playing else 0)
+
+        if not playing:
+            return reported_ms
+        if reported_ms >= predicted - 400:
+            return reported_ms
+        # El dato reportado quedó atrás de nuestra extrapolación: probablemente está
+        # desactualizado (Spotify aún no empujó el valor real). Seguimos extrapolando.
+        return int(predicted)
 
     async def _read_cover(self, thumbnail_ref):
         if not thumbnail_ref or DataReader is None:
@@ -201,6 +303,8 @@ class SpotifySession:
                 duration_ms=info.duration_ms,
                 position_ms=pos,
                 cover=info.cover,
+                accent_color=info.accent_color,
+                app_id=info.app_id,
                 error=info.error,
             )
 

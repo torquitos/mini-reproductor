@@ -3,7 +3,10 @@ __pycache__/
 *.pyo
 *.log
 *.ico
+!assets/icon.ico
 *.exe
+build/
+dist/
 venv/
 .env
 .DS_Store

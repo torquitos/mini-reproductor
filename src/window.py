@@ -1,22 +1,20 @@
-import asyncio
-from PIL import Image, ImageFilter
+import logging
+
 from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QLinearGradient,
+    QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QLinearGradient, QRadialGradient,
 )
 from PySide6.QtWidgets import QWidget, QApplication, QLabel, QMenu
 
-from .theme import W, H, M, WIN_W, WIN_H, BG_GRADIENT_TOP, BG_GRADIENT_BOTTOM, ACCENT
+from .theme import W, H, M, WIN_W, WIN_H, COVER, RADIUS, BG_BASE, BG_BASE_DARK, DEFAULT_ACCENT
 from .config import Config
 from .spotify import SpotifySession, ms
-from .widgets import AlbumArt, RingVisualizer, ProgressBar, Equalizer, ControlButton, pil2px
+from .widgets import AlbumArt, ProgressBar, Equalizer, ControlButton, CloseButton, VolumeButton
 
+LOGGER = logging.getLogger("nexus")
 
-def _blur_bg(pil_img):
-    img = pil_img.resize((W, H), Image.Resampling.LANCZOS)
-    img = img.filter(ImageFilter.GaussianBlur(radius=28))
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 170))
-    return pil2px(Image.alpha_composite(img.convert("RGBA"), overlay))
+INFO_X = M + COVER + 18
+INFO_W = W - COVER - 18
 
 
 class MiniPlayer(QWidget):
@@ -29,13 +27,15 @@ class MiniPlayer(QWidget):
         )
         self.setFixedSize(WIN_W, WIN_H)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMouseTracking(True)
 
-        self._bg_px = None
+        self._accent = QColor(*DEFAULT_ACCENT)
         self._spotify = SpotifySession()
         self._cfg = Config()
         self._tick = 0
         self._scroll_offset = 0
         self._scroll_step = 0
+        self._hovering = False
 
         self._build_ui()
         self._apply_position()
@@ -43,29 +43,40 @@ class MiniPlayer(QWidget):
 
     def _build_ui(self):
         self._cover = AlbumArt(self)
-        self._ring = RingVisualizer(self)
+        self._cover.move(M, M)
+
         self._progress = ProgressBar(self)
         self._eq = Equalizer(self)
 
+        self._status_label = QLabel("ESPERANDO", self)
+        self._status_label.setStyleSheet(
+            "color:rgba(255,255,255,0.4);font-size:9px;font-weight:600;"
+            "letter-spacing:1px;background:transparent;"
+        )
+
         self._title = QLabel("Abriendo Spotify...", self)
-        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title.setStyleSheet("color:#fff;font-size:14px;font-weight:bold;background:transparent;")
+        self._title.setStyleSheet(
+            "color:#fff;font-size:16px;font-weight:650;background:transparent;"
+        )
 
         self._artist = QLabel("Nexus Mini Player", self)
-        self._artist.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._artist.setStyleSheet("color:rgba(255,255,255,0.5);font-size:11px;background:transparent;")
+        self._artist.setStyleSheet(
+            "color:rgba(255,255,255,0.5);font-size:12px;background:transparent;"
+        )
 
         self._time_left = QLabel("0:00", self)
-        self._time_left.setStyleSheet("color:rgba(255,255,255,0.25);font-size:9px;background:transparent;")
-
+        self._time_left.setStyleSheet(
+            "color:rgba(255,255,255,0.38);font-size:10px;background:transparent;"
+        )
         self._time_right = QLabel("0:00", self)
         self._time_right.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self._time_right.setStyleSheet("color:rgba(255,255,255,0.25);font-size:9px;background:transparent;")
+        self._time_right.setStyleSheet(
+            "color:rgba(255,255,255,0.38);font-size:10px;background:transparent;"
+        )
 
-        self._btn_prev = ControlButton("◂", 40)
-        self._btn_play = ControlButton("▶", 46, play=True)
-        self._btn_next = ControlButton("▸", 40)
-
+        self._btn_prev = ControlButton("prev", 30)
+        self._btn_play = ControlButton("play", 40, play=True)
+        self._btn_next = ControlButton("next", 30)
         self._btn_prev.setParent(self)
         self._btn_play.setParent(self)
         self._btn_next.setParent(self)
@@ -73,58 +84,74 @@ class MiniPlayer(QWidget):
         self._btn_prev.clicked.connect(lambda: self._cmd("prev"))
         self._btn_play.clicked.connect(lambda: self._cmd("play"))
         self._btn_next.clicked.connect(lambda: self._cmd("next"))
-        self._progress.on_seek(lambda p: self._seek(p))
+        self._progress.on_seek(self._seek)
 
-        cx = M + (W - 200) // 2
-        cy = M + 52
-        self._ring.move(M + (W - 240) // 2, M + 32)
-        self._cover.move(cx, cy)
-        self._title.setGeometry(M + 16, M + 260, W - 32, 22)
-        self._artist.setGeometry(M + 16, M + 282, W - 32, 18)
-        self._time_left.setGeometry(M + 16, M + 306, (W - 32) // 2 - 4, 14)
-        self._time_right.setGeometry(M + (W - 32) // 2 + 20, M + 306, (W - 32) // 2 - 4, 14)
-        self._progress.setGeometry(M + 16, M + 322, W - 32, 14)
+        self._status_label.setGeometry(INFO_X, M + 8, INFO_W, 13)
+        self._title.setGeometry(INFO_X, M + 22, INFO_W, 22)
+        self._artist.setGeometry(INFO_X, M + 44, INFO_W, 16)
 
-        cw = 40 + 4 + 46 + 4 + 40
-        cx = M + (W - cw) // 2
-        self._btn_prev.move(cx, M + 345)
-        self._btn_play.move(cx + 44, M + 342)
-        self._btn_next.move(cx + 94, M + 345)
-        self._eq.setGeometry(M + 16, M + 380, W - 32, 22)
+        self._progress.setGeometry(INFO_X, M + 66, INFO_W, 14)
+        self._time_left.setGeometry(INFO_X, M + 81, INFO_W // 2, 12)
+        self._time_right.setGeometry(INFO_X + INFO_W // 2, M + 81, INFO_W // 2, 12)
+
+        ctrl_y = M + 96
+        play_size, side_size = 40, 30
+        gap = 22
+        center_x = INFO_X + INFO_W // 2
+        self._btn_play.move(center_x - play_size // 2, ctrl_y)
+        self._btn_prev.move(center_x - play_size // 2 - gap - side_size, ctrl_y + 5)
+        self._btn_next.move(center_x + play_size // 2 + gap, ctrl_y + 5)
+
+        self._eq.setGeometry(INFO_X, M + COVER - 24, INFO_W, 18)
+
+        self._btn_close = CloseButton(18, self)
+        self._btn_volume = VolumeButton(18, self)
+        self._btn_close.move(M + W - 18 - 6, M + 6)
+        self._btn_volume.move(M + W - 18 - 6 - 18 - 6, M + 6)
+        self._btn_close.clicked.connect(self._close_app)
+        self._btn_volume.on_change(self._spotify.set_volume)
+        self._btn_close.hide()
+        self._btn_volume.set_level(None)
 
     def _cmd(self, action):
-        asyncio.run_coroutine_threadsafe(self._spotify.control(action), self._spotify._loop)
+        self._spotify.run_coroutine(self._spotify.control(action))
 
     def _seek(self, pct):
         snap = self._spotify.snapshot()
         if snap.duration_ms <= 0:
             return
         self._progress.set(pct)
-        asyncio.run_coroutine_threadsafe(
-            self._spotify.seek(int(snap.duration_ms * pct)), self._spotify._loop
-        )
+        self._spotify.run_coroutine(self._spotify.seek(int(snap.duration_ms * pct)))
 
     def _update_cover(self):
         try:
             img = self._spotify.consume_cover()
             if img:
                 self._cover.set_album(img)
-                self._bg_px = _blur_bg(img)
-                self.update()
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.warning("No se pudo actualizar la carátula: %s", exc)
+
+    def _apply_accent(self, rgb):
+        if (rgb[0], rgb[1], rgb[2]) == (self._accent.red(), self._accent.green(), self._accent.blue()):
+            return
+        self._accent = QColor(*rgb)
+        self._progress.set_accent(rgb)
+        self._eq.set_accent(rgb)
+        self._btn_play.set_accent(rgb)
 
     def _loop(self):
         self._tick += 1
         if self._tick >= 10:
             self._tick = 0
-            asyncio.run_coroutine_threadsafe(self._spotify.refresh(), self._spotify._loop)
+            self._spotify.run_coroutine(self._spotify.refresh())
             self._update_cover()
+            self._btn_volume.set_level(self._spotify.get_volume())
 
         snap = self._spotify.snapshot()
+        self._apply_accent(snap.accent_color)
 
         title = snap.title
-        lim = 26
+        lim = 24
         if len(title) > lim:
             self._scroll_step += 1
             lp = title + "     "
@@ -142,11 +169,21 @@ class MiniPlayer(QWidget):
         self._time_left.setText(ms(snap.position_ms))
         self._time_right.setText(ms(snap.duration_ms))
         self._progress.set(self._spotify.progress_pct() / 100)
-        self._btn_play.setText("⏸" if snap.playing else "▶")
+        self._btn_play._icon = "pause" if snap.playing else "play"
+        self._btn_play.update()
 
-        self._ring.set_data(self._spotify.fake_frequencies(36), snap.playing)
-        self._eq.set_data(self._spotify.fake_frequencies(32), snap.playing)
+        if snap.error == "sin_soporte":
+            self._status_label.setText("NO DISPONIBLE")
+        elif snap.error == "sin_sesion":
+            self._status_label.setText("DESCONECTADO")
+        elif snap.playing:
+            self._status_label.setText("REPRODUCIENDO")
+        else:
+            self._status_label.setText("EN PAUSA")
+
+        self._eq.set_data(self._spotify.fake_frequencies(20), snap.playing)
         self._eq.tick()
+        self.update()
 
         QTimer.singleShot(40, self._loop)
 
@@ -157,32 +194,73 @@ class MiniPlayer(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        for i in range(12):
-            o = 4 + i
+        for i in range(10):
+            o = 3 + i
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(0, 0, 0, 18 - i))
-            p.drawRoundedRect(M - o, M - o + 6, W + o * 2, H + o * 2, 20, 20)
+            p.setBrush(QColor(0, 0, 0, 14 - i))
+            p.drawRoundedRect(M - o, M - o + 4, W + o * 2, H + o * 2, RADIUS + 4, RADIUS + 4)
 
         path = QPainterPath()
-        path.addRoundedRect(M, M, W, H, 18, 18)
+        path.addRoundedRect(M, M, W, H, RADIUS, RADIUS)
         p.setClipPath(path)
 
-        if self._bg_px:
-            p.drawPixmap(M, M, W, H, self._bg_px)
-        else:
-            g = QLinearGradient(M, M, M, H + M)
-            g.setColorAt(0.0, BG_GRADIENT_TOP)
-            g.setColorAt(1.0, BG_GRADIENT_BOTTOM)
-            p.fillRect(M, M, W, H, QBrush(g))
+        g = QLinearGradient(M, M, M + W, M + H)
+        g.setColorAt(0.0, BG_BASE)
+        g.setColorAt(1.0, BG_BASE_DARK)
+        p.fillRect(M, M, W, H, QBrush(g))
 
-        status = self._status_color()
-        if status:
-            p.setClipping(False)
+        tint = QRadialGradient(M + W, M, W * 0.7)
+        c1 = QColor(self._accent)
+        c1.setAlpha(45)
+        c2 = QColor(self._accent)
+        c2.setAlpha(0)
+        tint.setColorAt(0.0, c1)
+        tint.setColorAt(1.0, c2)
+        p.fillRect(M, M, W, H, QBrush(tint))
+
+        p.setClipping(False)
+        self._paint_status_dot(p)
+
+    def _paint_status_dot(self, p):
+        if self._hovering:
+            return
+        snap = self._spotify.snapshot()
+        if snap.error:
+            color = QColor("#FF5C5C")
+        elif snap.playing:
+            color = self._accent
+        else:
+            color = QColor("#6B6E76")
+        cx, cy = M + W - 12, M + 12
+        glow = QColor(color)
+        glow.setAlpha(70)
+        p.setBrush(glow)
+        p.drawEllipse(QPointF(cx, cy), 7, 7)
+        p.setBrush(color)
+        p.drawEllipse(QPointF(cx, cy), 3.5, 3.5)
+
+        if self._is_topmost():
+            pin_color = QColor(255, 255, 255, 140)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(status))
-            p.drawEllipse(QPointF(M + W - 12, M + 12), 4, 4)
-            p.setBrush(QColor(status).lighter(180))
-            p.drawEllipse(QPointF(M + W - 12, M + 12), 2, 2)
+            p.setBrush(pin_color)
+            px, py = M + W - 32, M + 12
+            p.drawEllipse(QPointF(px, py - 2), 2.2, 2.2)
+            pen = QPen(pin_color, 1.6)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.drawLine(QPointF(px, py), QPointF(px, py + 4))
+
+    def enterEvent(self, e):
+        self._hovering = True
+        self._btn_close.show()
+        self._btn_volume.set_hover_visible(True)
+        self.update()
+
+    def leaveEvent(self, e):
+        self._hovering = False
+        self._btn_close.hide()
+        self._btn_volume.set_hover_visible(False)
+        self.update()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -206,9 +284,9 @@ class MiniPlayer(QWidget):
     def _show_menu(self):
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu{background:#121418;color:#fff;border:1px solid #1C1F26;"
+            "QMenu{background:#17181D;color:#fff;border:1px solid #262830;"
             "padding:4px;border-radius:8px}"
-            "QMenu::item:selected{background:#1C1F26;}"
+            "QMenu::item:selected{background:#262830;}"
         )
         menu.addAction(
             "✓ Siempre encima" if self._is_topmost() else "Siempre encima",
@@ -228,26 +306,35 @@ class MiniPlayer(QWidget):
 
     def _apply_position(self):
         screen = QApplication.primaryScreen()
-        if screen:
-            geo = screen.availableGeometry()
-            x = self._cfg.x if self._cfg.x is not None else geo.right() - self.width() - 30
-            y = self._cfg.y if self._cfg.y is not None else geo.bottom() - self.height() - 30
-            self.move(max(0, x), max(0, y))
+        if not screen:
+            return
+        geo = screen.availableGeometry()
+        default_x = geo.right() - self.width() - 30
+        default_y = geo.bottom() - self.height() - 30
 
-    def _status_color(self):
-        snap = self._spotify.snapshot()
-        if snap.error and "No hay sesión" in snap.error:
-            return "#FF4444"
-        return "#00CECE" if snap.playing else "#666666"
+        x, y = self._cfg.x, self._cfg.y
+        if x is None or y is None or not self._position_is_visible(x, y):
+            x, y = default_x, default_y
+        self.move(max(0, x), max(0, y))
+
+    def _position_is_visible(self, x: int, y: int) -> bool:
+        """Evita que el widget quede atrapado fuera de pantalla si se guardó la
+        posición con un monitor que luego se desconectó (ej. laptop + monitor externo)."""
+        rect = self.frameGeometry()
+        rect.moveTo(x, y)
+        for screen in QApplication.screens():
+            if screen.availableGeometry().intersects(rect):
+                return True
+        return False
 
     def mouseDoubleClickEvent(self, e):
         if self._cover.geometry().contains(e.position().toPoint()):
             self._cmd("play")
 
-    def _close_app(self):
+    def close_app(self):
         self._cfg.save(self.x(), self.y(), self._is_topmost())
         self._spotify.close()
         QApplication.quit()
 
-
-
+    def _close_app(self):
+        self.close_app()
