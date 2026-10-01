@@ -1,5 +1,7 @@
 # Nexus Mini Player
 
+[![Descargar última versión](https://img.shields.io/github/v/release/torquitos/mini-reproductor?label=Descargar&style=for-the-badge&color=C95B45)](https://github.com/torquitos/mini-reproductor/releases/latest)
+
 Widget flotante para Windows que muestra lo que está sonando ahora mismo: carátula, título, artista, barra de progreso y controles básicos. No está atado a una sola app — lee cualquier reproductor que registre su sesión con Windows: **Spotify**, **YouTube Music**, **Apple Music**, el navegador, VLC, etc.
 
 ## Capturas
@@ -26,6 +28,14 @@ El color de acento (barra de progreso, botón de play, ecualizador) se calcula a
 
 ## Instalación
 
+### Opción rápida: descargar el .exe
+
+Andá a [Releases](https://github.com/torquitos/mini-reproductor/releases/latest), descargá el `.zip`, extraelo y ejecutá `NexusMiniPlayer.exe`. No requiere instalar Python ni nada más.
+
+> Windows puede mostrar una advertencia de SmartScreen la primera vez (normal en apps nuevas sin firma digital) — hacé clic en "Más información" → "Ejecutar de todas formas".
+
+### Desde el código fuente
+
 ```bash
 python -m venv venv
 venv\Scripts\activate
@@ -35,16 +45,14 @@ python app.pyw
 
 También podés abrir `app.pyw` con doble clic después de instalar las dependencias.
 
-### Ejecutable standalone (.exe)
-
-Si no querés instalar Python ni dependencias, podés compilar un `.exe` con [PyInstaller](https://pyinstaller.org):
+### Compilar tu propio .exe
 
 ```bash
 pip install pyinstaller
 pyinstaller nexus.spec --noconfirm
 ```
 
-El ejecutable queda en `dist\NexusMiniPlayer.exe` — doble clic y listo, sin instalar nada más.
+El ejecutable queda en `dist\NexusMiniPlayer.exe`.
 
 ## Controles
 
